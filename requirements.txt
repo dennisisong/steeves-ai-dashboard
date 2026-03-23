@@ -1,0 +1,7 @@
+streamlit
+pandas
+numpy
+requests
+tabulate
+plotly
+faster-whisper
