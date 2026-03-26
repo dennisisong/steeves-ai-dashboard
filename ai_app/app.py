@@ -12,7 +12,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import plotly.io as pio
+from plotly.subplots import make_subplots
 import requests
 import streamlit as st
 
@@ -44,67 +46,81 @@ def inject_branding(logo_path: str, side_art_path: str = "") -> None:
     st.markdown(
         f"""
         <style>
-        .stApp {{
-          /* iOS-like soft “translucent” backdrop */
-          background:
-            radial-gradient(1100px 600px at 15% 20%, rgba(0, 122, 255, 0.18), rgba(0, 0, 0, 0) 55%),
-            radial-gradient(900px 520px at 85% 25%, rgba(255, 45, 85, 0.16), rgba(0, 0, 0, 0) 55%),
-            radial-gradient(1000px 640px at 50% 85%, rgba(52, 199, 89, 0.14), rgba(0, 0, 0, 0) 60%),
-            linear-gradient(135deg, #f7f8ff 0%, #eef2ff 55%, #f8fafc 100%);
-          background-attachment: fixed;
-        }}
+            .stApp {{
+            background-color: #001f3f;
+            color: #ffffff;
+            }}
 
-        /* Make sidebar readable on top of background */
-        section[data-testid="stSidebar"] > div:first-child {{
-          background: rgba(255, 255, 255, 0.92);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-        }}
+            /* Sidebar */
+            section[data-testid="stSidebar"] > div:first-child {{
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-right: 1px solid rgba(255,255,255,0.1);
+            }}
 
-        /* Chat bubbles: clean cards */
-        div[data-testid="stChatMessage"] {{
-          background: rgba(255, 255, 255, 0.78);
-          border: 1px solid rgba(0,0,0,0.06);
-          border-radius: 14px;
-          padding: 0.25rem 0.75rem;
-          box-shadow: 0 14px 40px rgba(0,0,0,0.07);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-        }}
+            /* Chat bubbles */
+            div[data-testid="stChatMessage"] {{
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 0.25rem 0.75rem;
+            box-shadow: 0 14px 40px rgba(0,0,0,0.25);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            }}
 
-        /* Charts container */
-        div[data-testid="stPlotlyChart"] {{
-          background: rgba(255, 255, 255, 0.78);
-          border: 1px solid rgba(0,0,0,0.06);
-          border-radius: 14px;
-          padding: 0.25rem 0.5rem;
-          box-shadow: 0 14px 40px rgba(0,0,0,0.07);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-        }}
+            /* Charts container */
+            div[data-testid="stPlotlyChart"] {{
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 0.25rem 0.5rem;
+            box-shadow: 0 14px 40px rgba(0,0,0,0.25);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            }}
 
-        /* Side artwork card (used inside the Charts column) */
-        .steeves-sidecard {{
-          border-radius: 18px;
-          border: 1px solid rgba(0,0,0,0.06);
-          background: rgba(255,255,255,0.62);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          box-shadow: 0 20px 60px rgba(0,0,0,0.10);
-          overflow: hidden;
-          margin: 0.25rem 0 0.75rem 0;
-        }}
-        .steeves-sidecard img {{
-          width: 100%;
-          display: block;
-          opacity: 0.28;
-          filter: saturate(1.15) contrast(1.03);
-        }}
+            /* Side artwork */
+            .steeves-sidecard {{
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+            overflow: hidden;
+            margin: 0.25rem 0 0.75rem 0;
+            }}
 
-        /* Tighten top padding a bit */
-        .block-container {{
-          padding-top: 1.25rem;
-        }}
+            .steeves-sidecard img {{
+            width: 100%;
+            display: block;
+            opacity: 0.28;
+            filter: saturate(1.15) contrast(1.03);
+            }}
+
+            /* Headings */
+            h1, h2, h3, h4 {{
+            color: #ffffff;
+            }}
+
+            /* Buttons */
+            button[kind="primary"] {{
+            background-color: #0a84ff;
+            border-radius: 12px;
+            border: none;
+            font-weight: 500;
+            }}
+
+            button[kind="primary"]:hover {{
+            background-color: #0066cc;
+            }}
+
+            /* Padding */
+            .block-container {{
+            padding-top: 1.25rem;
+            }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -305,6 +321,235 @@ def chart_margin_vs_satisfaction(df: pd.DataFrame) -> Optional[Any]:
     return fig
 
 
+def chart_role_profitability(df: pd.DataFrame, top_n: int = 15) -> Optional[Any]:
+    """Revenue (bar) + margin % (line) by consultant role."""
+    required = {"Consultant Role", "Revenue", "Gross Margin"}
+    if not required.issubset(set(df.columns)):
+        return None
+
+    role = (
+        df.groupby("Consultant Role", dropna=False)
+        .agg(
+            Revenue=("Revenue", "sum"),
+            Gross_Margin=("Gross Margin", "sum"),
+        )
+        .reset_index()
+    )
+
+    role = role.rename(columns={"Gross_Margin": "Gross Margin"})
+    role = with_margin_pct(role)
+    role = role.sort_values("Revenue", ascending=False).head(int(top_n))
+
+    if role.empty:
+        return None
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(
+        go.Bar(
+            name="Revenue",
+            x=role["Consultant Role"],
+            y=role["Revenue"],
+            marker_color="#3498db",
+            hovertemplate="Role=%{x}<br>Revenue=%{y:$,.0f}<extra></extra>",
+        ),
+        secondary_y=False,
+    )
+    fig.add_trace(
+        go.Scatter(
+            name="Margin %",
+            x=role["Consultant Role"],
+            y=role["Margin_%"],
+            mode="lines+markers",
+            marker_color="#e74c3c",
+            line=dict(width=3, color="#e74c3c"),
+            hovertemplate="Role=%{x}<br>Margin=%{y:.1f}%<extra></extra>",
+        ),
+        secondary_y=True,
+    )
+
+    fig.update_layout(
+        title="Revenue & Profitability by Consultant Role",
+        height=480,
+        hovermode="x unified",
+        margin=dict(l=10, r=10, t=50, b=10),
+    )
+    fig.update_xaxes(title_text="Role", tickangle=-45)
+    fig.update_yaxes(title_text="Revenue ($)", secondary_y=False)
+    fig.update_yaxes(title_text="Margin (%)", secondary_y=True)
+    return fig
+
+
+def chart_utilization_by_role(df: pd.DataFrame, top_n: int = 15) -> Optional[Any]:
+    if "Consultant Role" not in df.columns or "Billable Hours" not in df.columns:
+        return None
+    m = (
+        df.groupby("Consultant Role", dropna=False)["Billable Hours"]
+        .sum(numeric_only=True)
+        .reset_index()
+    )
+    m = m.sort_values("Billable Hours", ascending=False).head(int(top_n))
+    if m.empty:
+        return None
+    fig = px.bar(
+        m,
+        x="Billable Hours",
+        y="Consultant Role",
+        orientation="h",
+        title=f"Total Billable Hours by Role (Top {top_n})",
+        color="Billable Hours",
+        color_continuous_scale="Viridis",
+    )
+    fig.update_layout(height=440, margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
+
+def chart_utilization_by_location(df: pd.DataFrame, top_n: int = 15) -> Optional[Any]:
+    if "Consultant Location" not in df.columns or "Billable Hours" not in df.columns:
+        return None
+    m = (
+        df.groupby("Consultant Location", dropna=False)["Billable Hours"]
+        .sum(numeric_only=True)
+        .reset_index()
+    )
+    m = m.sort_values("Billable Hours", ascending=False).head(int(top_n))
+    if m.empty:
+        return None
+    fig = px.bar(
+        m,
+        x="Billable Hours",
+        y="Consultant Location",
+        orientation="h",
+        title=f"Total Billable Hours by Location (Top {top_n})",
+        color="Billable Hours",
+        color_continuous_scale="Viridis",
+    )
+    fig.update_layout(height=440, margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
+
+def chart_project_timeline(df: pd.DataFrame, top_n: int = 15) -> Optional[Any]:
+    required = {"Project Name", "Worked Date", "Revenue", "Project Type"}
+    if not required.issubset(set(df.columns)):
+        return None
+
+    d = df.dropna(subset=["Worked Date"]).copy()
+    if d.empty:
+        return None
+
+    proj = (
+        d.groupby("Project Name", dropna=False)
+        .agg(
+            Start=("Worked Date", "min"),
+            End=("Worked Date", "max"),
+            Revenue=("Revenue", "sum"),
+            Gross_Margin=("Gross Margin", "sum") if "Gross Margin" in d.columns else ("Revenue", "sum"),
+            Project_Type=("Project Type", "first"),
+        )
+        .reset_index()
+    )
+    proj = proj.rename(columns={"Gross_Margin": "Gross Margin", "Project_Type": "Project Type"})
+
+    proj["Duration_Days"] = (proj["End"] - proj["Start"]).dt.days
+    proj = proj.sort_values("Revenue", ascending=False).head(int(top_n))
+    if proj.empty:
+        return None
+
+    fig = px.timeline(
+        proj,
+        x_start="Start",
+        x_end="End",
+        y="Project Name",
+        color="Project Type",
+        title=f"Top {top_n} Projects Timeline",
+        labels={"Project Name": "Project"},
+    )
+    fig.update_yaxes(categoryorder="total ascending")
+    fig.update_layout(height=560, margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
+
+def chart_top_projects_by_gross_margin(df: pd.DataFrame, top_n: int = 10) -> Optional[Any]:
+    if "Project Name" not in df.columns or "Gross Margin" not in df.columns or "Revenue" not in df.columns:
+        return None
+
+    m = (
+        df.groupby("Project Name", dropna=False)
+        .agg(
+            Revenue=("Revenue", "sum"),
+            Gross_Margin=("Gross Margin", "sum"),
+        )
+        .reset_index()
+    )
+
+    m["Margin_Pct"] = np.where(m["Revenue"] != 0, (m["Gross_Margin"] / m["Revenue"]) * 100.0, 0.0)
+    m = m.sort_values("Gross_Margin", ascending=False).head(int(top_n))
+    if m.empty:
+        return None
+
+    fig = px.bar(
+        m,
+        x="Gross_Margin",
+        y="Project Name",
+        orientation="h",
+        title=f"Top {top_n} Projects by Gross Margin",
+        color="Margin_Pct",
+        color_continuous_scale="RdYlGn",
+        hover_data={"Revenue": ":,.0f", "Margin_Pct": ":.1f"},
+    )
+    fig.update_layout(height=460, margin=dict(l=10, r=10, t=50, b=10))
+    fig.update_yaxes(categoryorder="total ascending")
+    return fig
+
+
+def chart_project_type_compare(df: pd.DataFrame) -> Optional[Any]:
+    required = {"Project Type", "Revenue", "Gross Margin"}
+    if not required.issubset(set(df.columns)):
+        return None
+
+    m = (
+        df.groupby("Project Type", dropna=False)
+        .agg(Revenue=("Revenue", "sum"), Gross_Margin=("Gross Margin", "sum"))
+        .reset_index()
+    )
+    m = m.sort_values("Revenue", ascending=False)
+    if m.empty:
+        return None
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(name="Revenue", x=m["Project Type"], y=m["Revenue"], marker_color="#3498db"))
+    fig.add_trace(
+        go.Bar(name="Gross Margin", x=m["Project Type"], y=m["Gross_Margin"], marker_color="#2ecc71")
+    )
+    fig.update_layout(
+        title="Revenue vs Gross Margin by Project Type",
+        barmode="group",
+        height=520,
+        margin=dict(l=10, r=10, t=50, b=10),
+    )
+    fig.update_xaxes(tickangle=-45)
+    return fig
+
+
+def chart_top_consultants(df: pd.DataFrame, top_n: int = 10) -> Optional[Any]:
+    t = compute_top_consultants(df, top_n=top_n)
+    if t is None or t.empty:
+        return None
+    metric = "Revenue" if "Revenue" in t.columns else ("Billable Hours" if "Billable Hours" in t.columns else None)
+    if metric is None:
+        return None
+    fig = px.bar(
+        t,
+        x=metric,
+        y="Consultant Name",
+        orientation="h",
+        title=f"Top {top_n} Consultants by {metric}",
+        color=metric,
+        color_continuous_scale="Blues",
+    )
+    fig.update_layout(height=460, margin=dict(l=10, r=10, t=50, b=10), yaxis={"categoryorder": "total ascending"})
+    return fig
+
+
 def parse_chart_intent(q: str) -> Optional[Tuple[str, int]]:
     s = (q or "").lower()
     wants = any(k in s for k in ["plot", "chart", "graph", "visual", "show me", "draw"])
@@ -313,12 +558,26 @@ def parse_chart_intent(q: str) -> Optional[Tuple[str, int]]:
     top_n = parse_top_n(s, 10)
     if "trend" in s and "revenue" in s:
         return ("revenue_trend", top_n)
+    if ("role" in s or "roles" in s) and ("margin" in s or "profit" in s) and ("revenue" in s or "profit" in s or "profitability" in s):
+        return ("role_profitability", top_n)
     if ("role" in s or "roles" in s) and "revenue" in s:
         return ("top_roles", top_n)
     if "client" in s and "revenue" in s:
         return ("top_clients", top_n)
     if "project" in s and "revenue" in s:
         return ("top_projects", top_n)
+    if ("consultant" in s or "consultants" in s) and "revenue" in s and "role" not in s:
+        return ("top_consultants", top_n)
+    if "timeline" in s and "project" in s:
+        return ("project_timeline", top_n)
+    if ("gross margin" in s or ("margin" in s and "gross" in s) or "profitability" in s) and "project" in s:
+        return ("top_projects_gross_margin", top_n)
+    if "project type" in s or ("type" in s and "project" in s):
+        return ("project_type", top_n)
+    if ("utilization" in s or "utilisation" in s) and "location" in s:
+        return ("utilization_by_location", top_n)
+    if ("utilization" in s or "utilisation" in s) and "role" in s:
+        return ("utilization_by_role", top_n)
     if "satisfaction" in s and ("margin" in s or "profit" in s or "profitability" in s):
         return ("satisfaction_margin", top_n)
     return None
@@ -525,13 +784,19 @@ inject_branding(logo_path=DEFAULT_LOGO, side_art_path=DEFAULT_SIDE_ART)
 pio.templates.default = "plotly_white"
 
 # Header
-header_l, header_r = st.columns([0.10, 0.90], vertical_alignment="center")
+header_l, header_mid, header_r = st.columns([0.08, 0.72, 0.20], vertical_alignment="center")
+
 with header_l:
     if os.path.exists(DEFAULT_LOGO):
-        st.image(DEFAULT_LOGO, width=64)
-with header_r:
+        st.image(DEFAULT_LOGO, width=60)
+
+with header_mid:
     st.title("Steeves & Associates — AI Analytics")
     st.caption("Dashboard • Chat • Data")
+
+with header_r:
+    if DEFAULT_SIDE_ART and os.path.exists(DEFAULT_SIDE_ART):
+        st.image(DEFAULT_SIDE_ART, use_container_width=True)
 
 # Defaults
 dataset_path = os.environ.get("DATASET_PATH", DEFAULT_DATASET)
@@ -587,15 +852,36 @@ def handle_prompt(prompt: str, current: Dict[str, Any]) -> None:
         if kind == "revenue_trend":
             title = "Revenue trend (monthly)"
             fig = chart_revenue_trend(df)
+        elif kind == "role_profitability":
+            title = f"Revenue & Profitability by Role (Top {top_n})"
+            fig = chart_role_profitability(df, top_n=top_n)
         elif kind == "top_roles":
             title = f"Top {top_n} roles by revenue"
             fig = chart_top_roles(df, top_n=top_n)
+        elif kind == "top_consultants":
+            title = f"Top {top_n} consultants by revenue"
+            fig = chart_top_consultants(df, top_n=top_n)
         elif kind == "top_clients":
             title = f"Top {top_n} clients by revenue"
             fig = chart_top_clients(df, top_n=top_n)
         elif kind == "top_projects":
             title = f"Top {top_n} projects by revenue"
             fig = chart_top_projects(df, top_n=top_n)
+        elif kind == "top_projects_gross_margin":
+            title = f"Top {top_n} projects by gross margin"
+            fig = chart_top_projects_by_gross_margin(df, top_n=top_n)
+        elif kind == "project_timeline":
+            title = f"Top {top_n} projects timeline"
+            fig = chart_project_timeline(df, top_n=top_n)
+        elif kind == "project_type":
+            title = "Revenue vs Gross Margin by Project Type"
+            fig = chart_project_type_compare(df)
+        elif kind == "utilization_by_role":
+            title = f"Utilization by Role (Top {top_n})"
+            fig = chart_utilization_by_role(df, top_n=top_n)
+        elif kind == "utilization_by_location":
+            title = f"Utilization by Location (Top {top_n})"
+            fig = chart_utilization_by_location(df, top_n=top_n)
         elif kind == "satisfaction_margin":
             title = "Client satisfaction vs margin"
             fig = chart_margin_vs_satisfaction(df)
@@ -692,6 +978,26 @@ tabs = st.tabs(["Dashboard", "Chat", "Data"])
 
 # ---------------- Dashboard ----------------
 with tabs[0]:
+    st.markdown(
+        """
+        <style>
+        /* Dashboard tab only: first tab panel */
+        div[role="tabpanel"]:first-of-type{
+            background-color: #001f3f;
+            border-radius: 18px;
+            padding: 16px;
+        }
+        /* Keep headings readable */
+        div[role="tabpanel"]:first-of-type h1,
+        div[role="tabpanel"]:first-of-type h2,
+        div[role="tabpanel"]:first-of-type h3,
+        div[role="tabpanel"]:first-of-type h4{
+            color: #ffffff !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.subheader("Dashboard")
 
     with st.expander("Filters", expanded=False):
@@ -734,44 +1040,97 @@ with tabs[0]:
     k4.metric("Billable Hours", f"{bill_hours:,.0f}")
     k5.metric("Avg Satisfaction", f"{avg_sat:,.2f}" if sat_col else "—")
 
+    dash_menu = st.radio(
+        "Menu",
+        ["Overview", "Consultants", "Projects", "Clients"],
+        horizontal=True,
+        label_visibility="visible",
+    )
+
     st.divider()
-    c_left, c_right = st.columns([0.62, 0.38], gap="large")
 
-    with c_left:
-        fig = chart_revenue_trend(df)
-        if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+    if dash_menu == "Overview":
+        c_left, c_right = st.columns([0.62, 0.38], gap="large")
 
-        cA, cB = st.columns(2)
-        with cA:
-            fig = chart_top_roles(df, top_n=10)
-            if fig is not None:
-                st.plotly_chart(fig, use_container_width=True)
-        with cB:
-            fig = chart_top_clients(df, top_n=10)
+        with c_left:
+            fig = chart_revenue_trend(df)
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
 
-    with c_right:
-        if DEFAULT_SIDE_ART and os.path.exists(DEFAULT_SIDE_ART):
-            ext = os.path.splitext(DEFAULT_SIDE_ART)[1].lower().lstrip(".") or "png"
-            b64 = _img_b64(DEFAULT_SIDE_ART)
-            st.markdown(
-                f"""
+            cA, cB = st.columns(2)
+            with cA:
+                fig = chart_top_roles(df, top_n=10)
+                if fig is not None:
+                    st.plotly_chart(fig, use_container_width=True)
+            with cB:
+                fig = chart_top_clients(df, top_n=10)
+                if fig is not None:
+                    st.plotly_chart(fig, use_container_width=True)
+
+        with c_right:
+            if DEFAULT_SIDE_ART and os.path.exists(DEFAULT_SIDE_ART):
+                ext = os.path.splitext(DEFAULT_SIDE_ART)[1].lower().lstrip(".") or "png"
+                b64 = _img_b64(DEFAULT_SIDE_ART)
+                st.markdown(
+                    f"""
 <div class="steeves-sidecard">
   <img src="data:image/{ext};base64,{b64}" alt="Project screenshot" />
 </div>
 """,
-                unsafe_allow_html=True,
-            )
+                    unsafe_allow_html=True,
+                )
 
-        fig = chart_top_projects(df, top_n=10)
-        if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            fig = chart_top_projects(df, top_n=10)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
 
-        fig = chart_margin_vs_satisfaction(df)
-        if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            fig = chart_margin_vs_satisfaction(df)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+
+    elif dash_menu == "Consultants":
+        c1, c2 = st.columns([0.62, 0.38], gap="large")
+        with c1:
+            fig = chart_role_profitability(df, top_n=15)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+            fig = chart_utilization_by_role(df, top_n=15)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+
+        with c2:
+            fig = chart_top_consultants(df, top_n=10)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+            fig = chart_utilization_by_location(df, top_n=10)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+
+    elif dash_menu == "Projects":
+        c1, c2 = st.columns([0.62, 0.38], gap="large")
+        with c1:
+            fig = chart_project_timeline(df, top_n=15)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+            fig = chart_top_projects_by_gross_margin(df, top_n=10)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+
+        with c2:
+            fig = chart_project_type_compare(df)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+
+    elif dash_menu == "Clients":
+        c1, c2 = st.columns([0.62, 0.38], gap="large")
+        with c1:
+            fig = chart_margin_vs_satisfaction(df)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
+        with c2:
+            fig = chart_top_clients(df, top_n=10)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- Chat ----------------
 with tabs[1]:
