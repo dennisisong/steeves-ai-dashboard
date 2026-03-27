@@ -17,6 +17,7 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 import requests
 import streamlit as st
+from openai import OpenAI
 
 try:
     from faster_whisper import WhisperModel
@@ -798,10 +799,23 @@ with header_r:
     if DEFAULT_SIDE_ART and os.path.exists(DEFAULT_SIDE_ART):
         st.image(DEFAULT_SIDE_ART, use_container_width=True)
 
+## add open ai
+def ask_openai(prompt):
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    return response.choices[0].message.content
+
 # Defaults
 dataset_path = os.environ.get("DATASET_PATH", DEFAULT_DATASET)
 compute_first_default = os.environ.get("COMPUTE_FIRST", "1") not in {"0", "false", "False"}
-use_ollama_default = os.environ.get("USE_OLLAMA", "1") not in {"0", "false", "False"}
+use_ollama_default = False
 host_default = normalize_host(os.environ.get("OLLAMA_HOST", "http://localhost:11434"))
 model_default = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 
@@ -923,10 +937,23 @@ def handle_prompt(prompt: str, current: Dict[str, Any]) -> None:
         st.rerun()
 
     # general LLM answer
-    if not settings["use_ollama"]:
-        current["messages"].append({"role": "assistant", "content": "No KPI tool matched. Enable Ollama explanations, or ask a KPI/chart question."})
-        save_session(current)
-        st.rerun()
+   if not settings["use_ollama"]:
+    try:
+        reply = ask_openai(prompt)
+
+        current["messages"].append({
+            "role": "assistant",
+            "content": reply
+        })
+
+    except Exception as e:
+        current["messages"].append({
+            "role": "assistant",
+            "content": f"OpenAI error: {str(e)}"
+        })
+
+    save_session(current)
+    st.rerun()
 
     ctx = df_schema_context(df)
     sys = (
