@@ -5,3 +5,4 @@ requests
 tabulate
 plotly
 faster-whisper
+openai
