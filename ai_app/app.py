@@ -937,23 +937,23 @@ def handle_prompt(prompt: str, current: Dict[str, Any]) -> None:
         st.rerun()
 
     # general LLM answer
-   if not settings["use_ollama"]:
-    try:
-        reply = ask_openai(prompt)
-
-        current["messages"].append({
-            "role": "assistant",
-            "content": reply
-        })
-
-    except Exception as e:
-        current["messages"].append({
-            "role": "assistant",
-            "content": f"OpenAI error: {str(e)}"
-        })
-
-    save_session(current)
-    st.rerun()
+           if not settings["use_ollama"]:
+            try:
+                reply = ask_openai(prompt)
+        
+                current["messages"].append({
+                    "role": "assistant",
+                    "content": reply
+                })
+        
+            except Exception as e:
+                current["messages"].append({
+                    "role": "assistant",
+                    "content": f"OpenAI error: {str(e)}"
+                })
+        
+            save_session(current)
+            st.rerun()
 
     ctx = df_schema_context(df)
     sys = (
