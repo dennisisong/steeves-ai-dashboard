@@ -936,42 +936,60 @@ def handle_prompt(prompt: str, current: Dict[str, Any]) -> None:
         save_session(current)
         st.rerun()
 
-    # general LLM answer
-           if not settings["use_ollama"]:
-            try:
-                reply = ask_openai(prompt)
-        
-                current["messages"].append({
-                    "role": "assistant",
-                    "content": reply
-                })
-        
-            except Exception as e:
-                current["messages"].append({
-                    "role": "assistant",
-                    "content": f"OpenAI error: {str(e)}"
-                })
-        
-            save_session(current)
-            st.rerun()
 
-    ctx = df_schema_context(df)
-    sys = (
-        "You are a project assistant for this dataset.\n"
-        "Answer using the provided context. If it's not in context, say you don't have it.\n"
-        "Be concise and specific."
-    )
+# general LLM answer
+if not settings["use_ollama"]:
     try:
-        answer = ollama_chat(
-            host=settings["host"],
-            model=settings["model"],
-            messages=[{"role": "system", "content": sys}, {"role": "user", "content": f"{ctx}\n\nQuestion:\n{prompt}"}],
-        )
-        current["messages"].append({"role": "assistant", "content": answer})
+        reply = ask_openai(prompt)
+
+        current["messages"].append({
+            "role": "assistant",
+            "content": reply
+        })
+
     except Exception as e:
-        current["messages"].append({"role": "assistant", "content": f"Chat failed: {type(e).__name__}: {e}"})
+        current["messages"].append({
+            "role": "assistant",
+            "content": f"OpenAI error: {str(e)}"
+        })
+
     save_session(current)
     st.rerun()
+
+
+ctx = df_schema_context(df)
+sys = (
+    "You are a project assistant for this dataset.\n"
+    "Answer using the provided context. If it's not in context, say you don't have it.\n"
+    "Be concise and specific."
+)
+
+try:
+    answer = ollama_chat(
+        host=settings["host"],
+        model=settings["model"],
+        messages=[
+            {"role": "system", "content": sys},
+            {"role": "user", "content": f"{ctx}\n\nQuestion:\n{prompt}"}
+        ],
+    )
+
+    current["messages"].append({
+        "role": "assistant",
+        "content": answer
+    })
+
+except Exception as e:
+    current["messages"].append({
+        "role": "assistant",
+        "content": f"Chat failed: {type(e).__name__}: {e}"
+    })
+
+save_session(current)
+st.rerun()
+
+
+
 
 # Settings (collapsed)
 with st.expander("Settings", expanded=False):
